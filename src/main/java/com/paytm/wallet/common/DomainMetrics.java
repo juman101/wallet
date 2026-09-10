@@ -19,10 +19,15 @@ public class DomainMetrics {
     private final Counter transfersConflicts;
 
     public DomainMetrics(MeterRegistry registry) {
-        this.walletsCreated = Counter.builder("wallets_created_total")
+        // NOTE: deliberately not "..._created_total" - Micrometer's Prometheus naming
+        // convention treats "_created" as OpenMetrics's reserved companion-timestamp suffix and
+        // silently strips it (e.g. "wallets_created_total" is exposed on the wire as just
+        // "wallets_total"). Found by scraping the live deployment's /actuator/prometheus and
+        // diffing against these registration names - not a guess.
+        this.walletsCreated = Counter.builder("wallet_creations_total")
                 .description("Wallets created (get-or-create winners only)")
                 .register(registry);
-        this.transfersCreated = Counter.builder("transfers_created_total")
+        this.transfersCreated = Counter.builder("transfer_creations_total")
                 .description("Transfer requests that won the idempotency-key insert race")
                 .register(registry);
         this.transfersCompleted = Counter.builder("transfers_completed_total")

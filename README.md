@@ -211,9 +211,13 @@ effect we didn't notice.
   See `DomainEvents` / `TransferService`.
 - **Metrics**: `/actuator/prometheus`. Standard HTTP metrics (request rate, latency incl. p99,
   error rate) come from Micrometer's built-in instrumentation of every Spring MVC request.
-  Domain counters (`transfers_created_total`, `transfers_completed_total`,
+  Domain counters (`transfer_creations_total`, `transfers_completed_total`,
   `transfers_declined_insufficient_funds_total`, `transfers_idempotent_replays_total`,
-  `transfers_conflicts_total`, `wallets_created_total`) are hand-registered in `DomainMetrics`.
+  `transfers_conflicts_total`, `wallet_creations_total`) are hand-registered in `DomainMetrics`.
+  (Not `..._created_total` - confirmed by scraping the live deployment that Micrometer's
+  Prometheus naming convention silently strips a `_created` segment as an OpenMetrics reserved
+  word, e.g. `wallets_created_total` was actually exposed as just `wallets_total`. Renamed to
+  avoid the collision once found.)
 - **Health**: `/actuator/health` (used by the Docker `HEALTHCHECK` and compose's
   `depends_on: condition: service_healthy`).
 
