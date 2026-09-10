@@ -54,19 +54,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         log.error("unhandled exception", ex);
-        // TEMP-DEBUG: surfacing the root cause in the response body while diagnosing the
-        // Render-deployed 5xx burst under A<->B contention. Revert to a generic message before
-        // final submission - see TODO in TransferService / README.
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error",
-                "An unexpected error occurred: " + rootCause(ex));
-    }
-
-    private String rootCause(Throwable ex) {
-        Throwable t = ex;
-        while (t.getCause() != null && t.getCause() != t) {
-            t = t.getCause();
-        }
-        return t.getClass().getSimpleName() + ": " + t.getMessage();
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error", "An unexpected error occurred");
     }
 
     private ResponseEntity<Map<String, Object>> error(HttpStatus status, String code, String message) {

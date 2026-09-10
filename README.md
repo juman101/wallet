@@ -43,8 +43,8 @@ wallets (
 
 transfers (
   id UUID PK,
-  from_wallet_id UUID NOT NULL REFERENCES wallets,
-  to_wallet_id   UUID NOT NULL REFERENCES wallets,
+  from_wallet_id UUID NOT NULL,  -- deliberately NOT a FK to wallets - see below
+  to_wallet_id   UUID NOT NULL,
   amount_paise   BIGINT NOT NULL CHECK (amount_paise > 0),
   idempotency_key VARCHAR UNIQUE NOT NULL,   -- exactly-once pivots on this constraint
   request_hash    VARCHAR NOT NULL,           -- fingerprint of (from,to,amount) for 409 detection
@@ -142,6 +142,32 @@ same property `SELECT ... FOR UPDATE` gets for free from the database that's alr
 of record. `synchronized`/in-process locks don't survive a second instance — see the debrief
 answer on "what happens across two application instances?" below.
 
+### Removed after live testing: FK from `transfers` to `wallets`
+
+This wasn't a design choice made up front - it was the schema's first version, and it caused a
+real, reproduced bug. `V1__init.sql` originally declared `from_wallet_id`/`to_wallet_id UUID NOT
+NULL REFERENCES wallets(id)`. Deployed and burst-tested with 40 concurrent A→B transfers racing
+40 concurrent B→A transfers, ~90% came back `500`.
+
+Root cause: PostgreSQL takes an implicit `FOR KEY SHARE` lock on every row a foreign key
+references, taken *during the INSERT itself*, in column declaration order
+(`from_wallet_id` then `to_wallet_id`) - not in the sorted order `TransferService` uses for its
+own explicit `SELECT ... FOR UPDATE`. So an A→B transfer's `INSERT INTO transfers` FK-locks A
+then B; a concurrent B→A transfer's insert FK-locks B then A. Each transaction then tries to
+escalate its FK-share lock to `FOR UPDATE` on the *other* wallet first (per the sorted order),
+and each is now waiting on a row the other transaction holds - the exact deadlock cycle the
+sorted lock order was supposed to prevent, just relocated one statement earlier where the sort
+order isn't in effect. Postgres detects it, aborts one side with `deadlock detected` (`40P01`),
+and it surfaces to the caller as a `500`.
+
+Fix (`V2__drop_transfer_wallet_fk.sql`): drop both foreign keys. Referential integrity is
+enforced at the application layer instead - `TransferService` already calls
+`walletRepository.findById` for both wallets before ever attempting the insert, in the same
+transaction. There's no wallet-deletion feature, so there's no concurrent-delete window an FK
+would have been the only thing protecting against. This is a known, documented PostgreSQL
+behavior (FK checks lock the referenced row), not a bug in Postgres - the bug was assuming a
+schema-level constraint couldn't have a concurrency side effect of its own.
+
 ### Rejected alternative: idempotency via in-memory map / Redis-only check
 
 Fails across restarts and across instances, and reintroduces exactly the TOCTOU gap section 2
@@ -233,6 +259,7 @@ See `AI_DISCLOSURE.md`.
 | `SELECT` then `INSERT` (no unique constraint) for get-or-create | Textbook TOCTOU race; two concurrent callers both pass the `SELECT` and both `INSERT` |
 | `SERIALIZABLE` isolation everywhere | Stronger than the actual contention pattern requires; forces a generic retry loop for anomalies this schema doesn't have |
 | Unsorted `SELECT ... FOR UPDATE` / unsorted atomic `UPDATE` | Deadlocks under concurrent opposite-direction transfers |
+| FK from `transfers` to `wallets` | Reproduced live: implicit FK-check row locks on INSERT are taken in column order, not our sorted order, reintroducing the A↔B deadlock one statement earlier |
 | App-level locks / `synchronized` | Doesn't hold across process restarts or multiple instances |
 | Redis / distributed lock for transfer mutual exclusion | New failure mode for a property Postgres row locks already give for free |
 | Idempotency via in-memory map or Redis-only pre-check | Doesn't survive restart/instances; reopens the TOCTOU gap a same-transaction DB constraint closes |

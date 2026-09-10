@@ -54,6 +54,22 @@ this exact two-resource contention pattern.
 comparison), `TransferConservationTest.concurrentOppositeDirectionTransfersDoNotDeadlockAndConserveTotal`
 (120 requests, asserts zero 5xx and conservation).
 
+**This one was actually caught live, not just reasoned about.** The first deployed version still
+had `transfers.from_wallet_id`/`to_wallet_id` declared as foreign keys to `wallets`. Burst-testing
+the deployed URL with 40 concurrent A→B transfers racing 40 concurrent B→A transfers returned
+~90% `500`s. Root cause: Postgres takes an implicit `FOR KEY SHARE` lock on each FK-referenced row
+*during the INSERT itself*, in column order (`from_wallet_id` then `to_wallet_id`) — not in the
+sorted order the explicit `SELECT ... FOR UPDATE` uses. That reintroduced the identical
+A↔B deadlock cycle one statement earlier, where the sort order had no effect: transaction 1
+FK-locks A then B (from its own insert), transaction 2 FK-locks B then A; each then tries to
+escalate to `FOR UPDATE` on the *other* wallet per the sorted order and blocks on a row the other
+already holds. Postgres detected the cycle and aborted one side with `deadlock detected`
+(`40P01`), surfaced as a generic `500`. Fixed by dropping both foreign keys
+(`V2__drop_transfer_wallet_fk.sql`) and relying on the pre-existing application-level
+`walletRepository.findById` existence checks instead — full writeup in the README's "Removed
+after live testing" section. This is exactly the kind of thing "we reproduce it against your URL"
+is meant to catch, and it did.
+
 ## 5. Source wallet becomes insufficient under concurrent debits
 
 **What happens:** Every transfer touching a wallet locks that wallet's row with `SELECT ... FOR

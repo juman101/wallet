@@ -42,6 +42,19 @@ import java.util.UUID;
  * done in a fixed wallet-id lock order, it can credit the "to" wallet before discovering the
  * "from" wallet has insufficient funds when "to" happens to sort first - a partial apply. Locking
  * both rows up front and deciding before mutating either avoids that entirely.
+ *
+ * <p><b>Why transfers has no FK to wallets.</b> It used to - {@code from_wallet_id}/{@code
+ * to_wallet_id REFERENCES wallets(id)}. That reintroduced the exact deadlock the sorted lock
+ * order above prevents: Postgres takes an implicit {@code FOR KEY SHARE} lock on each referenced
+ * wallet row during this method's own {@code INSERT INTO transfers}, in column order
+ * ({@code from_wallet_id} then {@code to_wallet_id}) - not in our sorted order. Under concurrent
+ * A&rarr;B / B&rarr;A transfers this let one transaction's FK-check lock on A collide with the
+ * other's later {@code FOR UPDATE} escalation on A (and symmetrically on B), a genuine
+ * cross-transaction wait cycle reproduced live as a burst of 500s. See
+ * {@code V2__drop_transfer_wallet_fk.sql} and {@code ADVERSARIAL_REVIEW.md}. Referential
+ * integrity is instead enforced by the {@code walletRepository.findById} checks below, in the
+ * same transaction, before any lock is taken - there is no wallet-deletion feature, so there is
+ * no concurrent-delete window an FK would have been protecting against anyway.
  */
 @Service
 public class TransferService {
