@@ -22,9 +22,12 @@ fail() { echo "[FAIL] $1"; FAIL=$((FAIL + 1)); }
 
 json_field() {
   # json_field '<json>' field_name -> value (string or number, unquoted)
-  local json="$1" field="$2"
-  echo "$json" | grep -o "\"$field\":\"[^\"]*\"" | head -1 | sed -E "s/\"$field\":\"([^\"]*)\"/\1/" \
-    || echo "$json" | grep -o "\"$field\":[0-9-]*" | head -1 | sed -E "s/\"$field\":([0-9-]*)/\1/"
+  local json="$1" field="$2" val
+  val=$(echo "$json" | grep -o "\"$field\":\"[^\"]*\"" | head -1 | sed -E "s/\"$field\":\"([^\"]*)\"/\1/")
+  if [ -z "$val" ]; then
+    val=$(echo "$json" | grep -o "\"$field\":[0-9-]*" | head -1 | sed -E "s/\"$field\":([0-9-]*)/\1/")
+  fi
+  echo "$val"
 }
 
 new_user() { echo "burst-$(date +%s%N)-$RANDOM"; }
