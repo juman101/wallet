@@ -1,0 +1,40 @@
+# Render Blueprint - free-tier web service + free-tier managed Postgres.
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: push this repo to GitHub, then "New +" -> "Blueprint" on Render, point it at the repo.
+services:
+  - type: web
+    name: wallet-transfer-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: wallet-transfer-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: wallet-transfer-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: wallet-transfer-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: wallet-transfer-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: wallet-transfer-db
+          property: password
+      - key: PORT
+        value: 8080
+
+databases:
+  - name: wallet-transfer-db
+    plan: free
+    databaseName: wallet
+    user: wallet
