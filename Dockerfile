@@ -5,7 +5,7 @@ WORKDIR /build
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
-RUN chmod +x mvnw && ./mvnw -q -o dependency:go-offline -B || ./mvnw -q dependency:go-offline -B
+RUN chmod +x mvnw && ./mvnw -q dependency:go-offline -B
 
 COPY src src
 RUN ./mvnw -q package -DskipTests -B
