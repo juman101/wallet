@@ -15,7 +15,26 @@
         </encoder>
     </appender>
 
+    <!-- Backs the public GET /logs endpoint - see InMemoryLogAppender. Same encoder as STDOUT,
+         so what's publicly viewable via /logs is byte-for-byte what the private Render console
+         shows, not a reduced view. -->
+    <appender name="PUBLIC_BUFFER" class="com.paytm.wallet.common.InMemoryLogAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>correlation_id</includeMdcKeyName>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <level>level</level>
+                <levelValue>[ignore]</levelValue>
+                <version>[ignore]</version>
+            </fieldNames>
+        </encoder>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
+        <appender-ref ref="PUBLIC_BUFFER"/>
     </root>
 </configuration>

@@ -203,12 +203,20 @@ effect we didn't notice.
 
 - **Logs**: structured JSON (`logstash-logback-encoder`) to stdout. Every request gets a
   correlation id (`X-Correlation-Id` — reused from the caller if supplied, generated otherwise,
-  echoed back in the response header) threaded through SLF4J's MDC, so every log line for that
-  request — HTTP access log included — carries it.
+  echoed back in the response header) threaded through SLF4J's MDC, so every domain-event log
+  line emitted while handling that request carries it. (There's no separate Tomcat/HTTP
+  access-log line per request - correlation happens through the domain events below, not a
+  request-in/request-out pair.)
 - **Domain events**, one structured log line each: `wallet.created`, `wallet.test_deposit`,
   `transfer.created`, `transfer.debited`, `transfer.credited`, `transfer.completed`,
   `transfer.declined.insufficient_funds`, `transfer.idempotent_replay`, `transfer.conflict`.
   See `DomainEvents` / `TransferService`.
+- **Public logs**: `GET /logs` (unauthenticated, `?limit=N` up to 2000) serves the last N raw log
+  lines - the exact same JSON the private Render console shows - as newline-delimited JSON. Added
+  specifically because the exercise asks for logs to be "publicly viewable" and Render's own
+  dashboard isn't; see `InMemoryLogAppender` / `LogsController`. Not a general production pattern
+  (a real system would put this behind its own access control) - scoped narrowly to this
+  exercise's grading requirement.
 - **Metrics**: `/actuator/prometheus`. Standard HTTP metrics (request rate, latency incl. p99,
   error rate) come from Micrometer's built-in instrumentation of every Spring MVC request.
   Domain counters (`transfer_creations_total`, `transfers_completed_total`,

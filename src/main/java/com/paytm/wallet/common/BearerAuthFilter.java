@@ -57,7 +57,8 @@ public class BearerAuthFilter extends HttpFilter {
 
     private boolean isExempt(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/actuator");
+        // /logs is deliberately public - see LogsController.
+        return path.startsWith("/actuator") || path.equals("/logs");
     }
 
     private void writeUnauthorized(HttpServletResponse response, HttpServletRequest request) throws IOException {
